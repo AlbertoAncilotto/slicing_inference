@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from get_receptive_field import compute_receptive_field
-from slicing import learn_slice_flip
+from slicing import sliced_forward, learn_slices
+
 
 class SimpleAutoencoder(nn.Module):
     def __init__(self):
@@ -46,23 +46,7 @@ class SimpleAutoencoder(nn.Module):
         x = self.neck(x)
         x = self.decoder(x)
         return x
-    
-    def forward_shapes(self, x):
-        print('Encoder shapes:')
-        for layer in self.encoder:
-            x = layer(x)
-            print(x.shape)
-            
-        # print('Neck shapes:')
-        # for layer in self.neck:
-        #     x = layer(x)
-        #     print(x.shape)
-            
-        # print('Decoder shapes:')
-        # for layer in self.decoder:
-        #     x = layer(x)
-        #     print(x.shape)
-        return x        
+      
                 
         
 
@@ -71,30 +55,17 @@ if __name__ == "__main__":
     
     # Compute receptive field - choose target layer based on receptive field and input resolution
     compute_receptive_field(model, None)
-    module = model
+    module = model.encoder
     input_shape = (1, 3, 160, 160)
     
-    slices = []
-    for slice_id in range(4):
-        # compute the slicing input/ output based on the set accuracy threshold
-        input_lines, output_lines = learn_slice_flip(module, num_slices=4, slice_id=slice_id, input_shape=input_shape, threshold=1e-6)
-        print('////////////////////////////////////////')
-        print(f"Slice {slice_id}: {input_lines} -> {output_lines}")
-        print('////////////////////////////////////////')
-        slices.append((input_lines, output_lines))
+    slices = learn_slices(module, input_shape, num_slices=4, threshold=1e-6)
         
     # Full model forward pass
     example_input = torch.rand(input_shape)
     example_output = module(example_input)
     
-    # Sliced model forward pass
-    slices_output = []
-    for slice in slices:
-        input_lines, output_lines = slice
-        input_tensor = example_input[:,:,input_lines[0]:input_lines[1],:]
-        output_tensor = module(input_tensor)[:,:,output_lines[0]:output_lines[1],:]
-        slices_output.append(output_tensor)
-    full_output_from_slices = torch.cat(slices_output, dim=2)
+    # Sliced forward pass
+    full_output_from_slices = sliced_forward(module, slices, example_input)
     
     # Compare outputs
     print(f"Full output from slices: {full_output_from_slices.shape}")

@@ -67,3 +67,20 @@ def learn_slice_flip(forward_fn, num_slices=4, slice_id=3, threshold=1e-6, input
             print(f"Max error: {torch.abs(output_tensor_p[:,:,target_lines[0]:target_lines[1],:] - output_tensor[:,:,offset:offset+out_h//num_slices,:]).max()}")
             return (start_row, end_row), target_lines
             
+def learn_slices(forward_fn, input_shape, num_slices=4, threshold=1e-6):
+    slices = []
+    for slice_id in range(num_slices):
+        input_lines, output_lines = learn_slice_flip(forward_fn, num_slices=num_slices, slice_id=slice_id, threshold=threshold, input_shape=input_shape)
+        slices.append((input_lines, output_lines))
+    return slices
+
+def sliced_forward(forward_fn, slices, example_input):
+    slices_output = []
+    for slice in slices:
+        input_lines, output_lines = slice
+        input_tensor = example_input[:,:,input_lines[0]:input_lines[1],:]
+        output_tensor = forward_fn(input_tensor)[:,:,output_lines[0]:output_lines[1],:]
+        slices_output.append(output_tensor)
+    full_output_from_slices = torch.cat(slices_output, dim=2)
+    
+    return full_output_from_slices
